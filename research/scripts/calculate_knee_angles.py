@@ -2,70 +2,95 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-# Input: named 3D coordinates exported by FMPose3D.
-# Update this path if your CSV is stored somewhere else.
-INPUT_CSV = "../data/running_3d_coordinates_named.csv"
+# Locate the CSV in your GitHub repository
+REPO_DIR = Path(__file__).resolve().parents[3]
+INPUT_CSV = REPO_DIR / "data" / "running_3d_coordinates csv.csv"
 
-# Output file for data checks.
-OUTPUT_CSV = "../data/coordinate_quality_check.csv"
+# Save the results in your research folder
+OUTPUT_CSV = (
+    REPO_DIR / "research" / "running_kinematics"
+    / "data" / "knee_angles.csv"
+)
+
+
+def calculate_knee_flexion(hip, knee, ankle):
+    """
+    Calculate estimated 3D knee flexion in degrees.
+    A straight knee is approximately 0 degrees.
+    """
+
+    thigh = hip - knee
+    shank = ankle - knee
+
+    dot_product = np.dot(thigh, shank)
+    magnitude = np.linalg.norm(thigh) * np.linalg.norm(shank)
+
+    if magnitude < 1e-10:
+        return np.nan
+
+    cosine = np.clip(dot_product / magnitude, -1.0, 1.0)
+    internal_angle = np.degrees(np.arccos(cosine))
+
+    return 180.0 - internal_angle
 
 
 def main():
-    csv_path = Path(INPUT_CSV)
+    df = pd.read_csv(INPUT_CSV)
 
-    if not csv_path.exists():
-        raise FileNotFoundError(
-            f"Could not find {csv_path}. "
-            "Check that the CSV is in the project's data folder."
+    required = {"frame", "time_seconds", "joint_index", "x", "y", "z"}
+
+    if not required.issubset(df.columns):
+        raise ValueError("The CSV is missing required columns.")
+
+    results = []
+
+    for frame, group in df.groupby("frame"):
+        if group["joint_index"].duplicated().any():
+            raise ValueError(f"Duplicate joint indices in frame {frame}")
+
+        joints = group.set_index("joint_index")
+
+        required_joints = [1, 2, 3, 4, 5, 6]
+        if not all(joint in joints.index for joint in required_joints):
+            raise ValueError(f"Missing knee landmarks in frame {frame}")
+
+        def position(index):
+            return joints.loc[index, ["x", "y", "z"]].to_numpy(
+                dtype=float
+            )
+
+        right_knee = calculate_knee_flexion(
+            position(1), position(2), position(3)
         )
 
-    df = pd.read_csv(csv_path)
+        left_knee = calculate_knee_flexion(
+            position(4), position(5), position(6)
+        )
 
-    required = {
-        "frame", "time_seconds", "joint_index",
-        "joint_name", "x", "y", "z"
-    }
-    missing = required - set(df.columns)
+        results.append({
+            "frame": frame,
+            "time_seconds": group["time_seconds"].iloc[0],
+            "right_knee_flexion_deg": right_knee,
+            "left_knee_flexion_deg": left_knee,
+        })
 
-    if missing:
-        raise ValueError(f"Missing CSV columns: {sorted(missing)}")
+    output = pd.DataFrame(results).sort_values("frame")
 
-    print("=== FMPose3D coordinate data check ===")
-    print(f"Rows: {len(df)}")
-    print(f"Frames: {df['frame'].nunique()}")
-    print(f"Unique joint indices: {df['joint_index'].nunique()}")
-    print(f"Missing coordinate values: {df[['x', 'y', 'z']].isna().sum().sum()}")
+    OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
+    output.to_csv(OUTPUT_CSV, index=False)
 
-    joints_per_frame = df.groupby("frame")["joint_index"].nunique()
-    print(f"Minimum joints in a frame: {joints_per_frame.min()}")
-    print(f"Maximum joints in a frame: {joints_per_frame.max()}")
+    print("=== Knee Angle Results ===")
+    print(f"Frames analyzed: {len(output)}")
+    print(output.head(10).to_string(index=False))
 
-    print("\nJoint indices and current labels:")
+    print("\nSummary:")
     print(
-        df[["joint_index", "joint_name"]]
-        .drop_duplicates()
-        .sort_values("joint_index")
-        .to_string(index=False)
+        output[
+            ["right_knee_flexion_deg", "left_knee_flexion_deg"]
+        ].describe().to_string()
     )
 
-    print(
-        "\nNote: joint labels and coordinate conventions must be verified "
-        "before calculating biomechanical angles."
-    )
-
-    quality = df.groupby("frame").agg(
-        time_seconds=("time_seconds", "first"),
-        joint_count=("joint_index", "nunique"),
-        missing_x=("x", lambda s: s.isna().sum()),
-        missing_y=("y", lambda s: s.isna().sum()),
-        missing_z=("z", lambda s: s.isna().sum()),
-    ).reset_index()
-
-    output_path = Path(OUTPUT_CSV)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    quality.to_csv(output_path, index=False)
-
-    print(f"\nSaved frame-level quality report to: {output_path}")
+    print(f"\nSaved results to: {OUTPUT_CSV}")
 
 
 if __name__ == "__main__":
