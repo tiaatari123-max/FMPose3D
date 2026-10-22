@@ -27,10 +27,9 @@ jobs:
         run: |
           python scripts/calculate_knee_angles.py
 
-      - name: Upload quality report
+      -  name: Upload knee angle results
         uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: running-kinematics-quality-report
-          path: research/running_kinematics/data/coordinate_quality_check.csv
-          if-no-files-found: warn
+          name: running-knee-angles
+          path: research/running_kinematics/data/knee_angles.csv
+          if-no-files-found: error
