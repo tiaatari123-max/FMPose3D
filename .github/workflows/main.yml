@@ -27,7 +27,9 @@ jobs:
       - name: Calculate lower limb joint angles
         run: |
           python research/running_kinematics/scripts/calculate_lower_limb_angles.py
-          
+      - name: Extract all 17 joint coordinates and angles
+        run: |
+          python research/running_kinematics/scripts/extract_all_joint_kinematics.py
       - name: Create 3D running animation
         run: |
           python research/running_kinematics/scripts/animate_running.py
@@ -50,4 +52,17 @@ jobs:
         with:
           name: lower-limb-joint-angles
           path: research/running_kinematics/data/lower_limb_joint_angles.csv
+          if-no-files-found: error
+      - name: Upload all 17 joint coordinates
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-17-joint-coordinates
+          path: research/running_kinematics/data/all_17_joint_coordinates.csv
+          if-no-files-found: error
+
+      - name: Upload all joint angles
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-joint-angles
+          path: research/running_kinematics/data/all_joint_angles.csv
           if-no-files-found: error
