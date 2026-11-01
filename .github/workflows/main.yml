@@ -24,7 +24,10 @@ jobs:
       - name: Calculate knee angles
         run: |
           python research/running_kinematics/scripts/calculate_knee_angles.py
-
+      - name: Calculate lower limb joint angles
+        run: |
+          python research/running_kinematics/scripts/calculate_lower_limb_angles.py
+          
       - name: Create 3D running animation
         run: |
           python research/running_kinematics/scripts/animate_running.py
@@ -41,4 +44,10 @@ jobs:
         with:
           name: running-3d-animation
           path: research/running_kinematics/data/running_3d_animation.gif
+          if-no-files-found: error
+      - name: Upload lower limb joint angle results
+        uses: actions/upload-artifact@v4
+        with:
+          name: lower-limb-joint-angles
+          path: research/running_kinematics/data/lower_limb_joint_angles.csv
           if-no-files-found: error
